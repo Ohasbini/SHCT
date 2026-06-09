@@ -71,7 +71,37 @@ We can always revisit this to adjust these values.
 
 ### Develop an on/off control strategy for the AC and ventilation system that keeps the server rooms' air temperature within an acceptable range. 
 
-TODO
+*Assigned to Omar*
+
+---
+---
+---
+
+## Task 2: Design the thermodynamic cycle of the AC unit to meet the requirements of the server room
+
+- Design the AC cycle as a function of the given compressor size and refrigerant type.
+- Take into account typical technical constraints.
+
+---
+
+### Answer:
+
+### Design the AC cycle as a function of the given compressor size and refrigerant type.
+
+- 3 different refrigerant: Propane, R1234yf, Dimethyl ether (DME)
+- For energy balance, 6 kW energy exchange should happen on the evaporator, air mass flow is 1.8 kg/s
+
+Assume a cross-flow configuration, at the plane of HX, the air temperature is constant (constant approach temperature assumption). Also assume a homogenuous temperature distribution in the room, so there's no temperature drop after the HX (heat removal as whole room of air instead of the stream of air cross the HX).
+
+Need to define a minimal approach temperature, which is the pinch temperature. In the Exercise 4, 5 K as pinch temperature is used. (-5 C at evap and 10 C of superheating, end temp is 5 C. The source temp is 10).
+
+We are going to use that value as our starting point.
+
+Say source temperature is 15 C inside the server room(this at later phase will become a variable, which we can plug in the simulation temperature) 
+
+The ambient temperature maximum value is in summer 35°C, that is going to be our maximum ambient temperature at the heat sink side (condenser).
+
+The AC cycle is defined by the compressor size and the refrigerant type, then will compare the envelop with pinch temperature.
 
 
 ## LLM Correction Prompt using gemma-4-e4b:
