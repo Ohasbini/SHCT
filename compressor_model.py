@@ -26,7 +26,7 @@ def recip_comp_corr_SP(param, refrigerant, transcrit=False):
     p_ratio = p_dis/p_suc
 
     # volumetric efficiency
-    _eta_vol = 1. - b0*(p_ratio - 1.)**b1
+    eta_vol = 1. - b0*(p_ratio - 1.)**b1
 
     # isentrpic efficiency
     eta_is = a0 - (0.6)/((p_ratio - a1)**(a2*(p_suc*1e2))) - a3*p_ratio**1.8
@@ -35,5 +35,8 @@ def recip_comp_corr_SP(param, refrigerant, transcrit=False):
     m_dot = 1./z_e['v']*eta_vol*(np.pi/4.*(50.e-3)**2.*(39.3e-3))*48.55/2.*2 # Der Verdichter hat zwei Zylinder aber die mechanische Frequenz entspricht nur der Hälfte der elektrischen Frequenz
     # adapt m_dot to D
     m_dot = m_dot * (_D*1e-3 / 50.e-3) ** 2
+    
+    # Elias: Modify it to 4 cylinders, so m_dot times 2
+    m_dot = m_dot * 2
 
     return eta_is, m_dot
