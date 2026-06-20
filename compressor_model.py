@@ -36,7 +36,5 @@ def recip_comp_corr_SP(param, refrigerant, transcrit=False):
     # adapt m_dot to D
     m_dot = m_dot * (_D*1e-3 / 50.e-3) ** 2
     
-    # Elias: Modify it to 4 cylinders, so m_dot times 2
-    m_dot = m_dot * 2
 
     return eta_is, m_dot
