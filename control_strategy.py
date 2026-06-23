@@ -1,20 +1,8 @@
-"""
-Supervisory on/off controller for the server-room cooling system.
 
-Modes:
-    0 = off            (room sealed, only the server load heats it)
-    1 = ventilation    (free cooling with outdoor air)
-    2 = AC             (vapour-compression compressor running)
 
-Ventilation is preferred over AC because it is essentially free, but ONLY
-when it can actually keep the room below `cooling_on`. When the outdoor air
-is too warm to hold the setpoint, the compressor takes over instead of
-letting the room drift up.
-"""
-
-cooling_on  = 17.0   # °C, start cooling above this
-cooling_off = 15.0   # °C, stop cooling below this (hysteresis band)
-margin      = 2.0    # °C, ventilation only worthwhile if T_ambient < T_room - margin
+cooling_on  = 15.0   # °C, start cooling above this
+cooling_off = 13.0   # °C, stop cooling below this
+margin      = 4.0    # °C, ventilation only worthwhile if T_ambient < T_room - margin
 
 idle_time = 600  # s, minimum compressor standstill before a restart
 run_time  = 300  # s, minimum compressor runtime once started
