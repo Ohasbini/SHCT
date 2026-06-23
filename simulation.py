@@ -252,7 +252,15 @@ def run_all(refrigerant: str, bore_mm: float):
 
 if __name__ == "__main__":
 
-        run_all("R1234yf", 40)
+        run_all("R1234yf", 30)
+        # run_all("R1234yf", 40)
+        # run_all("R1234yf", 50)
+        # run_all("DME", 30)
+        # run_all("DME", 40)
+        # run_all("DME", 50)
+        # run_all("propane", 30)
+        # run_all("propane", 40)
+        # run_all("propane", 50)
       
     
 
