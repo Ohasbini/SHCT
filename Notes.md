@@ -71,7 +71,66 @@ We can always revisit this to adjust these values.
 
 ### Develop an on/off control strategy for the AC and ventilation system that keeps the server rooms' air temperature within an acceptable range. 
 
-*Assigned to Omar*
+The control objective is to keep the server room temperature within an acceptable band by activating passive ventilation or active vapour-compression cooling when required. We adopt a simple **three-mode on/off controller** with temperature hysteresis to avoid rapid switching.
+
+**Operating modes**
+
+The same fan drives both modes; a set of dampers switches the airflow path between outdoor air intake (ventilation mode) and recirculation through the AC evaporator (AC mode).
+
+| Mode | Ventilator | Compressor | Condition |
+|------|-----------|------------|-----------|
+| 0 – Off | OFF | OFF | Room is within the acceptable temperature band |
+| 1 – Ventilation | ON (outdoor air in) | OFF | Outdoor air is cool enough to cool the room passively |
+| 2 – AC | ON (room air recirculated) | ON | Outdoor air is too warm for ventilation |
+
+**Temperature thresholds and dead-band**
+
+Cooling is activated when the room exceeds the upper threshold $T_\text{ON}$ and deactivated once it falls below the lower threshold $T_\text{OFF}$:
+
+$$T_\text{ON} = 17\,°\text{C}, \qquad T_\text{OFF} = 15\,°\text{C}$$
+
+The 2°C dead-band prevents chattering around the setpoint. The lower threshold $T_\text{OFF} = 15\,°\text{C}$ matches the design temperature used in Task 2.
+
+**Mode selection: ventilation versus AC**
+
+Ventilation is preferred over AC whenever outdoor air is sufficiently cool, since it requires only fan power (~90 W) rather than full compressor operation. Ventilation is selected when:
+
+$$T_\text{ambient} < T_\text{room} - \Delta T_\text{margin}, \qquad \Delta T_\text{margin} = 2\,°\text{C}$$
+
+This margin ensures outdoor air is meaningfully cooler than the room before ventilation is chosen. If the condition is not met (warm ambient), the system switches to AC mode.
+
+The expected seasonal behaviour is:
+- **Winter** (1–11°C ambient): ventilation covers all cooling needs throughout the day.
+- **Fall** (9–20°C ambient): mostly ventilation; AC activated only during afternoon temperature peaks.
+- **Spring** (5–22°C ambient): mixed; the controller switches dynamically between modes.
+- **Summer** (21–35°C ambient): ambient consistently exceeds the room target, so AC is required throughout.
+
+**Compressor protection constraints**
+
+To prevent mechanical wear from short-cycling, two timing constraints are enforced on the compressor:
+
+- **Minimum standstill time: 10 minutes** — the compressor must remain off for at least 10 minutes after each shutdown before it may restart.
+- **Minimum running time: 5 minutes** — once started, the compressor must run for at least 5 minutes before it can be switched off.
+
+During a compressor standstill lockout, ventilation is used as a temporary fallback whenever the ambient condition allows it.
+
+**State-machine transitions**
+
+The full set of allowed mode transitions is:
+
+$$\text{off} \;\xrightarrow{\;T_\text{room} > T_\text{ON},\;\; T_\text{amb} < T_\text{room} - \Delta T\;}\; \text{ventilation}$$
+
+$$\text{off} \;\xrightarrow{\;T_\text{room} > T_\text{ON},\;\; T_\text{amb} \geq T_\text{room} - \Delta T,\;\; \text{comp. allowed}\;}\; \text{AC}$$
+
+$$\text{ventilation} \;\xrightarrow{\;T_\text{room} < T_\text{OFF}\;}\; \text{off}$$
+
+$$\text{ventilation} \;\xrightarrow{\;T_\text{amb} \geq T_\text{room} - \Delta T,\;\; \text{comp. allowed}\;}\; \text{AC}$$
+
+$$\text{AC} \;\xrightarrow{\;T_\text{room} < T_\text{OFF},\;\; \text{min. runtime met}\;}\; \text{off}$$
+
+$$\text{AC} \;\xrightarrow{\;T_\text{amb} < T_\text{room} - \Delta T,\;\; \text{min. runtime met}\;}\; \text{ventilation}$$
+
+The controller is implemented in `control_strategy.py`. Timing constraints are stored in real minutes and converted to timesteps at initialisation, so the logic remains correct regardless of the simulation timestep used.
 
 ---
 ---
