@@ -119,9 +119,9 @@ def day_simulation(T_amb: np.ndarray, Q_server: np.ndarray, refrigerant: str,
 
             dT = (Q_cool[k] + Q_server[k]) * Dt / (Air_Mass * cp_air)
             T_room[k + 1] = T_room[k] + dT    
-
-            T_ev  = T_room[k] - 5.0
-            T_dew = dew_point_from_w(T_room[k], w_room[k])
+            T_room_safe = min(T_room[k], 55.0)   # clamp for CoolProp validity only
+            T_ev  = T_room_safe - 5.0
+            T_dew = dew_point_from_w(T_room_safe, w_room[k])
             dw = (M_dot * (w_sat(T_ev) - w_room[k]) * Dt / Air_Mass) if T_ev < T_dew else 0.0
             w_room[k + 1] = w_room[k] + dw
 
@@ -257,12 +257,18 @@ def run_all(refrigerant: str, bore_mm: float):
 
 
 if __name__ == "__main__":
+
+
+    ##Unsuccessful combinations
     # run_all("R1234yf", 30)
-    # run_all("R1234yf", 40)
-    # run_all("R1234yf", 50)
     # run_all("DME", 30)
-    # run_all("DME", 40)
-    # run_all("DME", 50)
-    run_all("Propane", 30)
-    run_all("Propane", 40)
-    run_all("Propane", 50)
+    # run_all("Propane",50)
+    # run_all("Propane",30)
+
+    ##Unsuccessful combinations
+    run_all("R1234yf", 40)
+    run_all("R1234yf", 50)
+    run_all("DME", 40)
+    run_all("DME", 50) 
+    run_all("Propane",40)
+    run_all("Propane",30)
