@@ -185,20 +185,19 @@ def plot_day(result: dict, title: str) -> plt.Figure:
     ax.grid(True, lw=0.3)
 
     # Panel 2: mode bands — AC height shows Q_server/Q_Ac ratio
+   # Panel 2: mode bands
     ax = axes[1]
     ax.fill_between(t, 0.0, 1.0,
-                    where=(mode == 1), step="post",
-                    alpha=0.5, color="green", label="Ventilation")
-    ax.fill_between(t, 1.15, 1.15 + ac_plr,
-                    where=(mode == 2), step="post",
-                    alpha=0.6, color="red", label="AC (height = Q_server/Q_Ac)")
-    ax.axhline(2.15, color="red", lw=0.6, ls="--", alpha=0.4)
+                where=(mode == 1), step="post",
+                alpha=0.5, color="green", label="Ventilation")
+    ax.fill_between(t, 1.15, 2.15,
+                where=(mode == 2), step="post",
+                alpha=0.6, color="red", label="AC")
     ax.set_yticks([0.5, 1.65])
     ax.set_yticklabels(["Vent.", "AC"])
     ax.set_ylim(-0.1, 2.4)
     ax.legend(fontsize=8, loc="upper right")
     ax.grid(True, lw=0.3, axis="x")
-
     # Panel 3: power flows
     ax = axes[2]
     ax.plot(t, result["Q_server"],             "r-",  lw=1.2, label="Q_server [kW]")
@@ -258,12 +257,12 @@ def run_all(refrigerant: str, bore_mm: float):
 
 
 if __name__ == "__main__":
-    run_all("R1234yf", 30)
-    run_all("R1234yf", 40)
-    run_all("R1234yf", 50)
-    run_all("DME", 30)
-    run_all("DME", 40)
-    run_all("DME", 50)
+    # run_all("R1234yf", 30)
+    # run_all("R1234yf", 40)
+    # run_all("R1234yf", 50)
+    # run_all("DME", 30)
+    # run_all("DME", 40)
+    # run_all("DME", 50)
     run_all("Propane", 30)
     run_all("Propane", 40)
     run_all("Propane", 50)
