@@ -1,7 +1,7 @@
 
 
 cooling_on  = 13.0   # °C, start cooling above this
-cooling_off = 10.0   # °C, stop cooling below this
+cooling_off = 9.0   # °C, stop cooling below this
 margin      = 2.0    # °C, ventilation only worthwhile if T_ambient < T_room - margin
 
 idle_time = 600  # s, minimum compressor standstill before a restart

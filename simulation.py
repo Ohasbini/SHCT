@@ -265,10 +265,9 @@ if __name__ == "__main__":
     # run_all("Propane",50)
     # run_all("Propane",30)
 
-    ##Unsuccessful combinations
+    ##Successful combinations
     run_all("R1234yf", 40)
     run_all("R1234yf", 50)
     run_all("DME", 40)
     run_all("DME", 50) 
     run_all("Propane",40)
-    run_all("Propane",30)
