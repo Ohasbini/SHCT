@@ -139,12 +139,13 @@ To locate the optimum solution, we defined the following boundary constraints:
 - $T_\text{co} \in [T_{\text{Summer,max}}+\Delta{}T_{\text{pinch}}+\Delta{}T_{\text{sh}},70]$
 - $T_\text{ev} \in [-20,T_{\text{room,target}}-\Delta{}T_{\text{pinch}}-\Delta{}T_{\text{sh}}]$
 
+A pinch temperature of 5K is used.
 
 Although a minimum cooling power constraint was initially considered, it was set to a negligible value because the previously defined minimum criteria were not consistently met. The minimum pressure ratio was fixed at 2 and remained satisfied throughout the search process.
 
 Based on these constraints, the optimal operating conditions were found to be:
-- $T_\text{opt,co} = 40.0°\text{C}$
-- $T_\text{opt,ev}= 10.0°\text{C}$.
+- $T_\text{opt,co} = 44.0°\text{C}$
+- $T_\text{opt,ev}= 6.0°\text{C}$.
 
 
 ### Optimum Results Summary:
@@ -152,12 +153,12 @@ Based on these constraints, the optimal operating conditions were found to be:
 | | | | | |
 |-|-|-|-|-| 
 | Compressor Size | Data | Propane | R1234yf | Dimethyl ether |
-| 30mm | Cooling Power [kW] | 4.91343 | 3.58249 | 3.46138 |
-| | COP | 5.34 | 5.14 | 5.33 |
-| 40mm | Cooling Power [kW] | 8.73499 | 6.36887 | 6.15356 | 
-| | COP | 5.34 | 5.14 | 5.33 |
-| 50mm | Cooling Power [kW] | 13.64841 | 9.95136 | 9.61494 |
-| | COP | 5.34 | 5.14 | 5.33 |
+| 30mm | Cooling Power [kW] | 4.0345 | 2.84624 | 2.82896 |
+| | COP | 3.99 | 3.83 | 4.07 |
+| 40mm | Cooling Power [kW] | 7.17245 | 5.05999 | 5.02926 | 
+| | COP | 3.99 | 3.83 | 4.07 |
+| 50mm | Cooling Power [kW] | 11.20695 | 7.90623 | 7.85822 |
+| | COP | 3.99 | 3.83 | 4.07 |
 
 
 
