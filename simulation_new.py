@@ -9,44 +9,25 @@ from control_strategy_new import Controller
 
 
 AC_PERFORMANCE = {
-    "Propane":  {30: (3.99, -4.0345), 40: (3.99, -7.17245), 50: (3.99, -11.20695)},
-    "R1234yf":  {30: (3.83, -2.84624), 40: (3.83, -5.05999), 50: (3.83, -7.90623)},
-    "DME":      {30: (4.07, -2.82896), 40: (4.07, -5.02926), 50: (4.07, -7.85822)},
+    "Propane":  {30: (3.99, 4.0345), 40: (3.99, 7.17245), 50: (3.99, 11.20695)},
+    "R1234yf":  {30: (3.83, 2.84624), 40: (3.83, 5.05999), 50: (3.83, 7.90623)},
+    "DME":      {30: (4.07, 2.82896), 40: (4.07, 5.02926), 50: (4.07, 7.85822)},
 }
 
 
 # ── Room / air properties ────────────────────────────────────────────────
 Room_Vol = 10.0 * 6.0 * 3.0     # m³
 Rho_air  = 1.225                 # kg/m³
-cv_air   = 0.718                # kJ/(kg*K)
 cp_air   = 1.005                 # kJ/(kg·K)
+cv_air = 0.718              #[kJ/(kg*K)]
 Air_Mass = Rho_air * Room_Vol    # ≈ 220.5 kg
 P_atm    = 101325.0              # Pa
 
-
-V_room = 10.0 * 6.0 * 3.0       #[m^3]
-p_atm = 101.3250                #[kPa]
-R_air = 0.287                   #[kJ/(kg*K)]
-T_air = 273.15 + 15             #[K]            
-m_air_room = p_atm * V_room / (R_air * T_air)
-
-cv_air = 0.718              #[kJ/(kg*K)]
-cp_air = 1.005              #[kJ/(kg*K)]
-
-m_dot = 1.8                     #[kg/s]
-P_vent = 0.09                   #[kW]
-
-Q_dot_vent_cool_min = -3 #[kW]
-
-T_COOL_ON = 17            #[°C]
-T_COOL_OFF = 13            #[°C]
-
-
-
-dt            = 150              # s, simulation timestep
-M_dot         = 1.8   # kg/s
+Dt            = 50              # s, simulation timestep
+M_dot         = Air_Mass / Dt    # kg/s
+M_dot         = 0.8
 W_Ventilation = 0.090            # kW, ventilation fan power
-i             = int(24 * 3600 / dt)   # timesteps per day (576)
+i             = int(24 * 3600 / Dt)   # timesteps per day (576)
 tau           = Air_Mass / M_dot      # s, ventilation time constant
 
 T_initial  = 15.0                # °C, initial room temperature
@@ -91,148 +72,12 @@ def dew_point_from_w(T_C: float, w: float) -> float:
 def w_sat(T_C: float) -> float:
     return HAPropsSI("W", "T", T_C + 273.15, "P", P_atm, "R", 1.0)
 
-def calc_Q_dot_vent_cool(T_room: float, T_amb: float, m_dot: float):
-    # Following calculate the heat removal when ventilation is on
-    # This is base on the Energy Balance
-    Q_dot_vent_cool = m_dot * cp_air * (T_amb - T_room) #[kW]
-    return Q_dot_vent_cool
-
-
-def if_vent_useful(Q_dot_vent_cool: float, Q_dot_server_est: float):
-    if (Q_dot_vent_cool + Q_dot_server_est) < -1:
-        return True
-    else:
-        return False
-
-def server_power_estimater(T_room_curr: float, T_room_prev: float, T_amb: float, Q_dot_AC: float, mode: int, dt):
-    '''
-    mode = 0: nothing, 1: ventilation, 2: AC ON
-    '''
-    if mode == 0:
-        Q_dot_server_est = m_air_room * cv_air * (T_room_curr - T_room_prev)/dt
-        return Q_dot_server_est
-    elif mode == 1:
-        Q_dot_server_est = m_air_room * cv_air * (T_room_curr - T_room_prev)/dt + m_dot * cp_air * (T_room_prev - T_amb)
-        return Q_dot_server_est
-    elif mode == 2:
-        Q_dot_server_est = m_air_room * cv_air * (T_room_curr - T_room_prev)/dt - Q_dot_AC
-        return Q_dot_server_est
-
-
-def controller(T_room_curr: float, T_room_prev: float, T_amb: float, Q_dot_AC: float, mode: int, dt):
-    # Estimate the server power first
-    Q_dot_server_est = server_power_estimater(T_room_curr, T_room_prev, T_amb, Q_dot_AC, mode, dt)
-    
-    # calculate how much heat removal the ventilation can supply
-    Q_dot_vent_cool = calc_Q_dot_vent_cool(T_room_curr, T_amb, m_dot)
-    
-    cool_tick = 0
-    # Check room temperature is at which range
-    if T_room_curr > 17:
-        # Critical, need full power cooling
-        # Check which one is better, AC or vent
-        cool_tick = 3
-    if T_room_curr > 16 and T_room_curr <= 17:
-        # somewhat okay but better bring it down, AC or vent
-        cool_tick = 2
-    if T_room_curr > 15 and T_room_curr <= 16:
-        # indicate small cooling needed, or do nothing
-        cool_tick = 1
-    if T_room_curr <= 15 and T_room_curr > 14:
-        # below target, can continue run the current mode, AC or vent for a bit
-        cool_tick = -1
-    if T_room_curr <= 14 and T_room_curr > 13:
-        # a little bit chill now, can stop cooling, if vent is on or AC when the temperature is rising, can let it run for a bit
-        cool_tick = -2
-    if T_room_curr <= 13:
-        # Too cold, stop all cooling
-        cool_tick = -3
-    
-    # Estimation of next step temperature by applying different cooling or do nothing
-    
-    # Do nothing
-    T_next_OFF = T_room_curr + Q_dot_server_est * dt /(m_air_room * cv_air)
-    # Vent
-    T_next_VEN = T_room_curr + (T_amb - T_room_curr) * m_dot * cp_air * dt / (m_air_room * cv_air) + Q_dot_server_est * dt / (m_air_room * cv_air)
-    # AC
-    T_next_AC = T_room_curr + (Q_dot_server_est + Q_dot_AC) * dt / (m_air_room * cv_air) 
-    
-    # Check which one gets closest to the target temperature of 15C
-    Delta_T_OFF = abs(T_next_OFF - 15)
-    Delta_T_VEN = abs(T_next_VEN - 15)
-    Delta_T_AC = abs(T_next_AC - 15)
-    
-    # Pack into an array with labels
-    deltas = np.array([Delta_T_OFF, Delta_T_VEN, Delta_T_AC])
-    labels = ['OFF', 'VEN', 'AC']
-    
-    # Find the index of the minimum value
-    idx = np.argmin(deltas)
-    
-    # Get the minimum value and its label
-    min_delta = deltas[idx]
-    best_action = labels[idx]
-    
-    if best_action == "OFF":
-        T_next = T_next_OFF
-    if best_action == "VEN":
-        T_next = T_next_VEN
-    if best_action == "AC":
-        T_next = T_next_AC
-    
-    # But we also have to look at the cool_tick, how critical it is to change state
-    # This is to protect the AC on off too often, so if the temperature of next action is in the buffer zone, can leave the AC running
-    # Check room temperature is at which range
-    cool_tick_next = 0
-    if T_next > 17:
-        # Critical, need full power cooling
-        # Check which one is better, AC or vent
-        cool_tick_next = 3
-    if T_next > 16 and T_next <= 17:
-        # somewhat okay but better bring it down, AC or vent
-        cool_tick_next = 2
-    if T_next > 15 and T_next <= 16:
-        # indicate small cooling needed, or do nothing
-        cool_tick_next = 1
-    if T_next <= 15 and T_next > 14:
-        # below target, can continue run the current mode, AC or vent for a bit
-        cool_tick_next = -1
-    if T_next <= 14 and T_next > 13:
-        # a little bit chill now, can stop cooling, if vent is on or AC when the temperature is rising, can let it run for a bit
-        cool_tick_next = -2
-    if T_next <= 13:
-        # Too cold, stop all cooling
-        cool_tick_next = -3
-        
-
-    
-    
-    if cool_tick_next == 3:
-        return 2
-    if cool_tick_next == 2:
-        if mode == 2:
-            return 2
-        elif mode != idx:
-            return mode
-        return mode
-    if cool_tick_next == 1:
-        if mode == 2:
-            return 2
-        else:
-            return mode
-        
-    if cool_tick == -3:
-        return 0
-    
-
-
-    
 
 # ── One-day simulation ────────────────────────────────────────────────────
 def day_simulation(T_amb: np.ndarray, Q_server: np.ndarray, refrigerant: str,
                    cylinder_size: float, T_init: float = T_initial) -> dict:
 
-    COP_inner, Q_dot_AC = AC_PERFORMANCE[refrigerant][cylinder_size]
+    COP_inner, Q_Ac = AC_PERFORMANCE[refrigerant][cylinder_size]
     
     T_amb    = interpolate(T_amb)
     Q_server = interpolate(Q_server)
@@ -240,25 +85,54 @@ def day_simulation(T_amb: np.ndarray, Q_server: np.ndarray, refrigerant: str,
     T_room = np.empty(i);  T_room[0] = T_init
     w_room = np.empty(i);  w_room[0] = w_from_rh(T_init, Rh_initial)
     mode   = np.empty(i, dtype=int)
-    mode[0] = 0
     Q_cool = np.zeros(i)
     W_comp = np.zeros(i)
     W_vent = np.zeros(i)
     ac_plr = np.zeros(i)
 
+    controller = Controller(Dt, M_dot, cp_air, cv_air, Air_Mass)
 
-    for k in range(i-2):
-        mode[k+1] = controller(T_room[k+1],T_room[k],T_amb[k+1],Q_dot_AC,mode[k],dt)
+    for k in range(i - 1):
+        if k == 0:
+            mode[k] = controller.step(T_room[k], T_amb[k], Q_server[k], T_room[k], Q_Ac, 0)
+        else:
+            mode[k] = controller.step(T_room[k], T_amb[k], Q_server[k], T_room[k-1], Q_Ac, mode[k-1])
 
-        if mode[k+1] == 0:                                 # ── off ──
-            T_room[k+2] = T_room[k+1] + Q_server[k+1] * dt /(m_air_room * cv_air)
+        if mode[k] == 0:                                        # ── off ──
+            T_room[k + 1] = T_room[k] + Q_server[k] * Dt / (Air_Mass * cv_air)
+            w_room[k + 1] = w_room[k]
 
-        elif mode[k+1] == 1:                                      # ── ventilation ──
-            T_room[k+2] = T_room[k+1] + (T_amb[k+1] - T_room[k+1]) * m_dot * cp_air * dt / (m_air_room * cv_air) + Q_server[k+1] * dt / (m_air_room * cv_air)
+        elif mode[k] == 1:                                      # ── ventilation ──
+            T_ss = T_amb[k] + Q_server[k] / (M_dot * cp_air)
+            #T_room[k + 1] = T_ss + (T_room[k] - T_ss) * np.exp(-Dt / tau)
+            T_room[k+1] = T_room[k] + (T_amb[k] - T_room[k]) * M_dot * cp_air * Dt / (Air_Mass * cv_air) + Q_server[k] * Dt / (Air_Mass * cv_air)
 
-        elif mode[k+1] == 2:                                      # ── AC on/off ──
-            T_room[k+2] = T_room[k+1] + (Q_server[k+1] + Q_dot_AC) * dt / (m_air_room * cv_air) 
+            Q_cool[k] = Air_Mass * cp_air * (T_room[k + 1] - T_room[k]) / Dt - Q_server[k]
+            W_vent[k] = W_Ventilation
 
+            w_outdoor     = w_from_rh(T_amb[k], Rh_Outdoor)
+            w_room[k + 1] = w_room[k] + (w_outdoor - w_room[k]) * (1.0 - np.exp(-Dt / tau))
+
+        elif mode[k] == 2:                                      # ── AC on/off ──
+            # Part-load ratio for COP_res correction (task sheet formula)
+            x       = min(Q_server[k] / Q_Ac, 1.0)
+            COP_res = COP_inner * x / (0.1 + 0.9 * x) if x > 0 else COP_inner
+
+            Q_cool[k] = -Q_Ac                  
+            W_comp[k] = Q_Ac / COP_res         
+            W_vent[k] = W_Ventilation
+            ac_plr[k] = x
+
+            dT = (Q_cool[k] + Q_server[k]) * Dt / (Air_Mass * cv_air)
+            T_room[k + 1] = T_room[k] + dT    
+            #T_room[k+1] = T_room[k] + (Q_server[k] + -Q_Ac) * Dt / (Air_Mass * cv_air) 
+            T_room_safe = min(T_room[k], 55.0)   # clamp for CoolProp validity only
+            T_ev  = T_room_safe - 5.0
+            T_dew = dew_point_from_w(T_room_safe, w_room[k])
+            dw = (M_dot * (w_sat(T_ev) - w_room[k]) * Dt / Air_Mass) if T_ev < T_dew else 0.0
+            w_room[k + 1] = w_room[k] + dw
+
+    #RH_room = np.array([rh_from_w(T_room[k], w_room[k]) for k in range(i)])
     for arr in (Q_cool, W_comp, W_vent, ac_plr):
         arr[-1] = arr[-2]
     mode[-1] = mode[-2]
@@ -274,6 +148,7 @@ def day_simulation(T_amb: np.ndarray, Q_server: np.ndarray, refrigerant: str,
         "W_vent":   W_vent,
         "ac_plr":   ac_plr,
         "w_room":   w_room * 1e3,      # g/kg
+        #"RH_room":  RH_room * 100.0,   # %
     }
 
 
@@ -310,7 +185,7 @@ def plot_day(result: dict, title: str) -> plt.Figure:
     ax = axes[0]
     ax.plot(t, result["T_room"], "b-",  lw=1.4, label="T_room")
     ax.plot(t, result["T_amb"],  "g--", lw=1.0, label="T_ambient")
-    ax.axhline(15, color="r",      ls=":", lw=0.8, label="T_ON = 15 °C")
+    ax.axhline(17, color="r",      ls=":", lw=0.8, label="T_ON = 17 °C")
     ax.axhline(13, color="orange", ls=":", lw=0.8, label="T_OFF = 13 °C")
     ax.set_ylabel("Temperature [°C]")
     ax.legend(fontsize=8, loc="upper right")
