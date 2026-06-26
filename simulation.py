@@ -21,6 +21,7 @@ Rho_air  = 1.225                 # kg/m³
 cp_air   = 1.005                 # kJ/(kg·K)
 Air_Mass = Rho_air * Room_Vol    # ≈ 220.5 kg
 P_atm    = 101325.0              # Pa
+cv_air   = 0.718                 # kJ/(kg·K)
 
 Dt            = 150              # s, simulation timestep
 M_dot         = Air_Mass / Dt    # kg/s
@@ -94,30 +95,28 @@ def day_simulation(T_amb: np.ndarray, Q_server: np.ndarray, refrigerant: str,
         mode[k] = controller.step(T_room[k], T_amb[k], Q_server[k])
 
         if mode[k] == 0:                                        # ── off ──
-            T_room[k + 1] = T_room[k] + Q_server[k] * Dt / (Air_Mass * cp_air)
+            T_room[k + 1] = T_room[k] + Q_server[k] * Dt / (Air_Mass * cv_air)
             w_room[k + 1] = w_room[k]
 
         elif mode[k] == 1:                                      # ── ventilation ──
-            T_ss = T_amb[k] + Q_server[k] / (M_dot * cp_air)
-            T_room[k + 1] = T_ss + (T_room[k] - T_ss) * np.exp(-Dt / tau)
 
-            Q_cool[k] = Air_Mass * cp_air * (T_room[k + 1] - T_room[k]) / Dt - Q_server[k]
+            T_room[k + 1] = T_room[k] + (Q_server[k]/(Air_Mass * cv_air) + (cp_air/(cv_air*tau))*(T_amb[k] - T_room[k]))*Dt
+
+            Q_cool[k] = Air_Mass * cv_air * (T_room[k + 1] - T_room[k]) / Dt - Q_server[k]
             W_vent[k] = W_Ventilation
 
             w_outdoor     = w_from_rh(T_amb[k], Rh_Outdoor)
             w_room[k + 1] = w_room[k] + (w_outdoor - w_room[k]) * (1.0 - np.exp(-Dt / tau))
 
         elif mode[k] == 2:                                      # ── AC on/off ──
-            # Part-load ratio for COP_res correction (task sheet formula)
             x       = min(Q_server[k] / Q_Ac, 1.0)
             COP_res = COP_inner * x / (0.1 + 0.9 * x) if x > 0 else COP_inner
 
             Q_cool[k] = -Q_Ac                  
             W_comp[k] = Q_Ac / COP_res         
             W_vent[k] = W_Ventilation
-            ac_plr[k] = x
 
-            dT = (Q_cool[k] + Q_server[k]) * Dt / (Air_Mass * cp_air)
+            dT = (Q_cool[k] + Q_server[k]) * Dt / (Air_Mass * cv_air)
             T_room[k + 1] = T_room[k] + dT    
             T_room_safe = min(T_room[k], 55.0)   # clamp for CoolProp validity only
             T_ev  = T_room_safe - 5.0
@@ -126,7 +125,7 @@ def day_simulation(T_amb: np.ndarray, Q_server: np.ndarray, refrigerant: str,
             w_room[k + 1] = w_room[k] + dw
 
     RH_room = np.array([rh_from_w(T_room[k], w_room[k]) for k in range(i)])
-    for arr in (Q_cool, W_comp, W_vent, ac_plr):
+    for arr in (Q_cool, W_comp, W_vent):
         arr[-1] = arr[-2]
     mode[-1] = mode[-2]
 
@@ -139,7 +138,6 @@ def day_simulation(T_amb: np.ndarray, Q_server: np.ndarray, refrigerant: str,
         "Q_cool":   Q_cool,
         "W_comp":   W_comp,
         "W_vent":   W_vent,
-        "ac_plr":   ac_plr,
         "w_room":   w_room * 1e3,      # g/kg
         "RH_room":  RH_room * 100.0,   # %
     }
@@ -169,7 +167,7 @@ def metrics(results: dict) -> dict:
 def plot_day(result: dict, title: str) -> plt.Figure:
     t      = result["t"]
     mode   = result["mode"]
-    ac_plr = result["ac_plr"]
+    
 
     fig, axes = plt.subplots(4, 1, figsize=(11, 12), sharex=True)
     fig.suptitle(title, fontsize=13)
@@ -266,8 +264,5 @@ if __name__ == "__main__":
     # run_all("Propane",30)
 
     ##Successful combinations
-    run_all("R1234yf", 40)
-    run_all("R1234yf", 50)
     run_all("DME", 40)
-    run_all("DME", 50) 
     run_all("Propane",40)
