@@ -30,22 +30,22 @@ class Controller:
     def server_power_estimater(self, T_room_curr: float, T_room_prev: float, 
                                T_amb: float, Q_dot_AC: float, 
                                mode: int, dt: float, m_air_room: float,
-                               cv_air: float, cp_air: float, m_dot: float):
-        '''
-        mode = 0: nothing, 1: ventilation, 2: AC ON
-        '''
+                               cv_air: float, cp_air: float, m_dot: float) -> float:
+        
         if mode == 0:
-            Q_dot_server_est = m_air_room * cv_air * (T_room_curr - T_room_prev)/dt
-            return Q_dot_server_est
+            return m_air_room * cv_air * (T_room_curr - T_room_prev) / dt
+        
         elif mode == 1:
-            Q_dot_server_est = m_air_room * cv_air * (T_room_curr - T_room_prev)/dt + m_dot * cp_air * (T_room_prev - T_amb)
-            return Q_dot_server_est
+            return m_air_room * cv_air * (T_room_curr - T_room_prev) / dt + m_dot * cp_air * (T_room_prev - T_amb)
+        
         elif mode == 2:
-            Q_dot_server_est = m_air_room * cv_air * (T_room_curr - T_room_prev)/dt - Q_dot_AC
-            return Q_dot_server_est
+            return m_air_room * cv_air * (T_room_curr - T_room_prev) / dt - Q_dot_AC
+        
+        return 0.0 
 
     def step(self, T_room: float, T_ambient: float, Q_server: float, T_room_prev: float, Q_dot_AC: float, mode_prev: int) -> int:
-        T_vent_floor = T_ambient + Q_server / (self._m_dot * self._cp)
+
+  
 
         Q_dot_vent_cool = self._m_dot * self._cp * (T_ambient - T_room) #[kW]
         
@@ -54,17 +54,17 @@ class Controller:
         
         vent_useful     = T_ambient < T_room - margin
         
-        vent_useful =   (Q_dot_vent_cool + Q_dot_server_est) <= 1
+        vent_useful =   (float(Q_dot_vent_cool) + Q_dot_server_est) <= 1
         #vent_sufficient = T_vent_floor < cooling_on    
         vent_sufficient = 1 
         AC_not_on_yet = T_room < AC_MUST_ON
         use_vent        = vent_useful and vent_sufficient and AC_not_on_yet
         
         if Q_dot_vent_cool < -5:
-            use_vent = 1
+            use_vent = True
             
         if (Q_dot_vent_cool + Q_dot_server_est) < 0:
-            use_vent = 1
+            use_vent = True
 
         comp_allowed      = self._comp_off_steps >= self._idle_steps
         must_keep_running = self.mode == 2 and self._comp_on_steps < self._run_steps
