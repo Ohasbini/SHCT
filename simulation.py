@@ -1,7 +1,9 @@
 import os, sys
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MultipleLocator, FixedLocator
+from matplotlib.ticker import MultipleLocator
 from CoolProp.HumidAirProp import HAPropsSI # type: ignore
 from matplotlib.figure import Figure
 
@@ -9,10 +11,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from control_strategy import Controller
 
 
+# (COP_inner, Q_Ac [kW]) keyed by refrigerant and piston bore diameter [mm]
 AC_PERFORMANCE = {
-    "Propane":  {30: (3.99, 4.0345), 40: (3.99, 7.17245), 50: (3.99, 11.20695)},
-    "R1234yf":  {30: (3.83, 2.84624), 40: (3.83, 5.05999), 50: (3.83, 7.90623)},
-    "DME":      {30: (4.07, 2.82896), 40: (4.07, 5.02926), 50: (4.07, 7.85822)},
+    "Propane":  {30: (3.60, 3.60644), 40: (3.60, 6.41145), 50: (3.60, 10.01789)},
+    "R1234yf":  {30: (3.44, 2.49951), 40: (3.44, 4.44358), 50: (3.44, 6.94309)},
+    "DME":      {30: (3.67, 2.50095), 40: (3.67, 4.44613), 50: (3.67, 6.94707)},
 }
 
 
@@ -25,19 +28,16 @@ Air_Mass = Rho_air * Room_Vol    # ≈ 220.5 kg
 P_atm    = 101325.0              # Pa
 
 Dt            = 50              # s, simulation timestep
-M_dot         = Air_Mass / Dt    # kg/s
-M_dot         = 0.8
-W_Ventilation = 0.090            # kW, ventilation fan power
+M_dot         = 0.8              # kg/s, fixed ventilation mass flow rate
+W_Ventilation = 0.040            # kW, ventilation fan power
 i             = int(24 * 3600 / Dt)   # timesteps per day (576)
-tau           = Air_Mass / M_dot      # s, ventilation time constant
+tau           = Air_Mass / M_dot      # s, room air exchange time constant (1st-order flush)
 
 T_initial  = 15.0                # °C, initial room temperature
 Rh_initial = 0.60                # initial relative humidity
 Rh_Outdoor = 0.60                # outdoor relative humidity
 
 File_directory = os.path.dirname(os.path.abspath(__file__))
-Refrigerants   = ["Propane", "R1234yf", "DME"]
-Comp_Sizes     = [30, 40, 50]
 Seasons = {
     "spring": "ambient temperature spring",
     "summer": "ambient temperature summer",
@@ -95,49 +95,53 @@ def day_simulation(T_amb: np.ndarray, Q_server: np.ndarray, refrigerant: str,
 
     for k in range(i - 1):
         if k == 0:
-            mode[k] = controller.step(T_room[k], T_amb[k], Q_server[k], T_room[k], Q_Ac, 0)
+            mode[k] = controller.step(T_room[k], T_amb[k], T_room[k], Q_Ac, 0)
         else:
-            mode[k] = controller.step(T_room[k], T_amb[k], Q_server[k], T_room[k-1], Q_Ac, mode[k-1])
+            mode[k] = controller.step(T_room[k], T_amb[k], T_room[k-1], Q_Ac, mode[k-1])
 
         if mode[k] == 0:                                        # ── off ──
+            # Closed room, no mass flow → constant-volume energy balance: Q = m·cv·dT
             T_room[k + 1] = T_room[k] + Q_server[k] * Dt / (Air_Mass * cv_air)
             w_room[k + 1] = w_room[k]
 
         elif mode[k] == 1:                                      # ── ventilation ──
-            T_ss = T_amb[k] + Q_server[k] / (M_dot * cp_air)
-            #T_room[k + 1] = T_ss + (T_room[k] - T_ss) * np.exp(-Dt / tau)
+            # Linearised Euler step of the 1st-order ODE for an open room:
+            #   m_room·cv·dT/dt = m_dot·cp·(T_amb - T_room) + Q_server
+            # cp for the advective airflow term, cv for the stored internal energy term
             T_room[k+1] = T_room[k] + (T_amb[k] - T_room[k]) * M_dot * cp_air * Dt / (Air_Mass * cv_air) + Q_server[k] * Dt / (Air_Mass * cv_air)
 
+            # Q_cool here is the net heat removed by ventilation airflow
             Q_cool[k] = Air_Mass * cp_air * (T_room[k + 1] - T_room[k]) / Dt - Q_server[k]
             W_vent[k] = W_Ventilation
 
+            # Humidity tracks outdoor air with the same 1st-order time constant tau
             w_outdoor     = w_from_rh(T_amb[k], Rh_Outdoor)
             w_room[k + 1] = w_room[k] + (w_outdoor - w_room[k]) * (1.0 - np.exp(-Dt / tau))
 
         elif mode[k] == 2:                                      # ── AC on/off ──
-            # Part-load ratio for COP_res correction (task sheet formula)
+            # Part-load ratio x = Q_server / Q_Ac; COP degrades at low load via task-sheet curve
             x       = min(Q_server[k] / Q_Ac, 1.0)
             COP_res = COP_inner * x / (0.1 + 0.9 * x) if x > 0 else COP_inner
 
-            Q_cool[k] = -Q_Ac                  
-            W_comp[k] = Q_Ac / COP_res         
+            Q_cool[k] = -Q_Ac                   # AC runs at full rated capacity
+            W_comp[k] = Q_Ac / COP_res          # electrical draw = Q_Ac / part-load COP
             W_vent[k] = W_Ventilation
-     
 
+            # Same closed-room energy balance as mode 0 but with AC heat removal added
             dT = (Q_cool[k] + Q_server[k]) * Dt / (Air_Mass * cv_air)
-            T_room[k + 1] = T_room[k] + dT    
-            #T_room[k+1] = T_room[k] + (Q_server[k] + -Q_Ac) * Dt / (Air_Mass * cv_air) 
+            T_room[k + 1] = T_room[k] + dT
             T_room_safe = min(T_room[k], 55.0)   # clamp for CoolProp validity only
-            T_ev  = T_room_safe - 5.0
+            T_ev  = T_room_safe - 5.0             # evaporator temp ≈ room - 5 K (pinch)
             T_dew = dew_point_from_w(T_room_safe, w_room[k])
+            # Moisture condenses on the evaporator coil only when T_ev < dew point
             dw = (M_dot * (w_sat(T_ev) - w_room[k]) * Dt / Air_Mass) if T_ev < T_dew else 0.0
             w_room[k + 1] = w_room[k] + dw
-            # After updating w_room[k+1], add this condensation check:
-             # physically, excess drops out
+
+        # Saturate humidity: any excess moisture above the saturation limit falls out as liquid
         w_max = w_sat(T_room[k+1])
         if w_room[k+1] > w_max:
             condensate[k] = True
-            w_room[k+1] = w_max 
+            w_room[k+1] = w_max
 
     RH_room = np.array([rh_from_w(T_room[k], w_room[k]) for k in range(i)])
     for arr in (Q_cool, W_comp, W_vent):
@@ -194,14 +198,13 @@ def plot_day(result: dict, title: str) -> Figure:
     ax = axes[0]
     ax.plot(t, result["T_room"], "b-",  lw=1.4, label="T_room")
     ax.plot(t, result["T_amb"],  "g--", lw=1.0, label="T_ambient")
-    ax.axhline(17, color="r",      ls=":", lw=0.8, label="T_ON = 17 °C")
-    ax.axhline(13, color="orange", ls=":", lw=0.8, label="T_OFF = 13 °C")
+    ax.axhline(17, color="r",      ls=":", lw=0.8, label="T_ON = 16.0 °C")
+    ax.axhline(13, color="orange", ls=":", lw=0.8, label="T_OFF = 12.5 °C")
     ax.set_ylabel("Temperature [°C]")
     ax.legend(fontsize=8, loc="upper right")
     ax.grid(True, lw=0.3)
 
-    # Panel 2: mode bands — AC height shows Q_server/Q_Ac ratio
-   # Panel 2: mode bands
+    # Panel 2: mode bands
     ax = axes[1]
     ax.fill_between(t, 0.0, 1.0,
                 where=(mode == 1), step="post",
@@ -236,14 +239,11 @@ def plot_day(result: dict, title: str) -> Figure:
     ax2.legend(fontsize=8, loc="upper right")
     ax.grid(True, lw=0.3)
 
-    # X axis: major every 2 h, minor at every timestep
-    step_edges = np.linspace(0, 24, i + 1)
+    # X axis: major every 2 h
     for a in axes:
         a.set_xlim(0, 24)
         a.xaxis.set_major_locator(MultipleLocator(2))
-        a.xaxis.set_minor_locator(FixedLocator(step_edges.tolist()))
         a.tick_params(axis="x", which="major", length=6)
-        a.tick_params(axis="x", which="minor", length=2.5, color="0.5")
 
     plt.tight_layout()
     return fig
@@ -276,13 +276,11 @@ def run_all(refrigerant: str, bore_mm: float):
 if __name__ == "__main__":
 
 
-    ##Unsuccessful combinations
-    # run_all("R1234yf", 30)
-    # run_all("DME", 30)
-    # run_all("Propane",50)
-    # run_all("Propane",30)
-
-    ##Successful combinations
+    # all combinations
+    run_all("R1234yf", 30)
+    run_all("DME", 30)
+    run_all("Propane",50)
+    run_all("Propane",30)
     run_all("R1234yf", 40)
     run_all("R1234yf", 50)
     run_all("DME", 40)
